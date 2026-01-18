@@ -116,6 +116,7 @@ void LesterHeistLoop()
 // Main Loop
 void main()
 {
+	SET_MISSION_FLAG(1);
 	NETWORK_SET_SCRIPT_IS_SAFE_FOR_NETWORK_GAME();
 	while (true)
 	{

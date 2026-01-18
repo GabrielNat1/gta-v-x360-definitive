@@ -105,6 +105,7 @@ float GetDistToDelivery() {
 }
 
 void main() {
+	SET_MISSION_FLAG(1);
 	NETWORK_SET_SCRIPT_IS_SAFE_FOR_NETWORK_GAME();
 
 	ShowLesterMsg("É urgente! Desculpe não avisar antes. Um carro essencial para o plano está rondando Los Santos. Capture-o e leve até minha fábrica!", "URGENTE");

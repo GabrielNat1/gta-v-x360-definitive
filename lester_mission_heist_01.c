@@ -164,6 +164,7 @@ void CheckMontanhasSpot() {
 
 void main()
 {
+	SET_MISSION_FLAG(1);
 	NETWORK_SET_SCRIPT_IS_SAFE_FOR_NETWORK_GAME();
 
 	ShowLesterMsg("Adicionei alguns pontos no mapa. Verifique cada um, um deles terá o item que precisamos.", "Atenção!");

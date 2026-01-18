@@ -15,6 +15,7 @@ bool playerLeft = false;
 unsigned long leaveTime = 0;
 
 void main() {
+    SET_MISSION_FLAG(1);
     // Criar blip no chão na área dos golpes
     blipId = CREATE_BLIP_FOR_COORD(LESTER_FACTORY_X, LESTER_FACTORY_Y, LESTER_FACTORY_Z);
 
