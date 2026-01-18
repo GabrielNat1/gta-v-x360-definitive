@@ -71,6 +71,7 @@ bool hostagesHandsUp = false;
 bool alarmSequenceStarted = false;
 int deliveryCheckpoint = 0;
 bool canDeliverLoot = false;
+int deliveryMoneyProp = 0;
 
 void ShowLesterMsg(const char* msg, const char* title) {
 	_SET_NOTIFICATION_TEXT_ENTRY("STRING");
@@ -190,10 +191,16 @@ float GetDist(vector3 a, float x, float y, float z) {
 void SpawnFleecaNPCs() {
     if (fleecaNpcsSpawned) return;
 
-    vector3 npcsPos[3] = {
-        {FLEECA_BLIP_X + 1.0f, FLEECA_BLIP_Y + 1.0f, FLEECA_BLIP_Z},
-        {FLEECA_BLIP_X - 1.0f, FLEECA_BLIP_Y - 1.0f, FLEECA_BLIP_Z},
-        {FLEECA_BLIP_X,        FLEECA_BLIP_Y + 2.0f, FLEECA_BLIP_Z}
+    vector3 npcPos[3] = {
+        {-2962.59f, 485.86f, 15.69f},
+        {-2964.90f, 479.48f, 16.69f},
+        {-2960.92f, 483.06f, 15.69f}
+    };
+
+    float npcHeading[3] = {
+        180.0f,
+        90.0f,
+        270.0f
     };
 
     Hash pedHash = GET_HASH_KEY("a_m_y_business_01");
@@ -201,22 +208,29 @@ void SpawnFleecaNPCs() {
     while (!HAS_MODEL_LOADED(pedHash)) WAIT(0);
 
     for (int i = 0; i < 3; i++) {
+
         fleecaNpcs[i] = CREATE_PED(
-            26,
+            26,                 // CIVMALE
             pedHash,
-            npcsPos[i],
-            180.0f,
+            npcPos[i],
+            npcHeading[i],
             1,
             1
         );
 
         SET_ENTITY_AS_MISSION_ENTITY(fleecaNpcs[i], 1, 1);
 
-        // 🔒 trava total
+        // 🧱 garante que ele fique no chão
+        PLACE_OBJECT_ON_GROUND_PROPERLY(fleecaNpcs[i]);
+
+        // 🔒 trava total do NPC
         SET_BLOCKING_OF_NON_TEMPORARY_EVENTS(fleecaNpcs[i], 1);
         SET_PED_FLEE_ATTRIBUTES(fleecaNpcs[i], 0, 0);
         SET_PED_COMBAT_ATTRIBUTES(fleecaNpcs[i], 46, 1);
         SET_PED_CAN_RAGDOLL(fleecaNpcs[i], 0);
+
+        // ❄️ congela até o assalto começar
+        FREEZE_ENTITY_POSITION(fleecaNpcs[i], 1);
     }
 
     fleecaNpcsSpawned = true;
@@ -315,6 +329,33 @@ bool MissionFailed() {
         IS_PLAYER_BEING_ARRESTED(PLAYER_ID(), 1)) return true;
 
     return false;
+}
+
+void MissionPassed(const char* missionName) {
+
+    // Som de missão concluída
+    PLAY_MISSION_COMPLETE_AUDIO("MISSION_COMPLETE");
+
+    WAIT(300);
+
+    // Texto "Missão Concluída"
+    _SET_NOTIFICATION_TEXT_ENTRY("STRING");
+    ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME("Missão Concluída");
+    _SET_NOTIFICATION_MESSAGE_CLAN_TAG_2(
+        "CHAR_DEFAULT",
+        "CHAR_DEFAULT",
+        1,
+        7,
+        missionName,
+        "",
+        1,
+        "",
+        8
+    );
+    _DRAW_NOTIFICATION(5000, 1);
+
+    // Finaliza flag de missão
+    SET_MISSION_FLAG(0);
 }
 
 void main() {
@@ -465,6 +506,7 @@ retry:
 			// NPCs levantam as mãos
 			for (int i = 0; i < 3; i++) {
 				if (fleecaNpcs[i]) {
+					FREEZE_ENTITY_POSITION(fleecaNpcs[i], 0);
 					TASK_HANDS_UP(
 						fleecaNpcs[i],
 						-1,
@@ -506,8 +548,13 @@ retry:
 				"Lester"
 			);
 
+			SET_VEHICLE_ENGINE_ON(getawayCar, 1, 1, 0);
+			SET_VEHICLE_HANDBRAKE(getawayCar, 0);
+			SET_VEHICLE_UNDRIVEABLE(getawayCar, 0);
+
 			alarmTriggered = true;
 		}
+
 
 		// Quando perder a polícia, liberar entrega
 		if (alarmTriggered && !escapeComplete &&
@@ -555,6 +602,7 @@ retry:
 
 		// Depositar dinheiro
 		if (canDeliverLoot && !lootPlaced) {
+
 			float dist = GetDist(ppos, DELIVERY_X, DELIVERY_Y, DELIVERY_Z);
 
 			if (dist < 2.5f) {
@@ -565,8 +613,25 @@ retry:
 
 					lootPlaced = true;
 					canDeliverLoot = false;
-
 					FloatingHelpText("");
+
+					// 🔹 spawn prop de dinheiro
+					Hash moneyHash = GET_HASH_KEY("prop_money_bag_01");
+					REQUEST_MODEL(moneyHash);
+					while (!HAS_MODEL_LOADED(moneyHash)) WAIT(0);
+
+					deliveryMoneyProp = CREATE_OBJECT(
+						moneyHash,
+						DELIVERY_X,
+						DELIVERY_Y,
+						DELIVERY_Z - 1.0f,
+						1, 1, 0
+					);
+
+					SET_ENTITY_AS_MISSION_ENTITY(deliveryMoneyProp, 1, 1);
+					PLACE_OBJECT_ON_GROUND_PROPERLY(deliveryMoneyProp);
+					FREEZE_ENTITY_POSITION(deliveryMoneyProp, 1);
+					SET_ENTITY_COLLISION(deliveryMoneyProp, 0, 0);
 
 					if (deliveryCheckpoint) {
 						DELETE_CHECKPOINT(deliveryCheckpoint);
@@ -574,13 +639,10 @@ retry:
 					}
 
 					ShowLesterMsg(
-						"Perfeito. Agora sai daí.",
+						"Perfeito. Agora deixa comigo.",
 						"Lester"
 					);
 				}
-
-			} else {
-				FloatingHelpText("");
 			}
 		}
 
@@ -596,12 +658,18 @@ retry:
 
 			missionFinished = true;
 			tickAfterLoot = 0;
+			WAIT(2000);
+			MissionPassed("Assalto ao Fleeca");
 		}
 
 		// Encerrar script
 		if (missionFinished) {
 			tickAfterLoot++;
 			if (tickAfterLoot > 150) {
+				if (deliveryMoneyProp) {
+					DELETE_OBJECT(&deliveryMoneyProp);
+					deliveryMoneyProp = 0;
+				}
 				REQUEST_SCRIPT("lester_mission_heist_fleeca_final_03");
 				while (!HAS_SCRIPT_LOADED("lester_mission_heist_fleeca_final_03")) WAIT(0);
 				START_NEW_SCRIPT("lester_mission_heist_fleeca_final_03", 1024);
