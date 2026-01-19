@@ -72,10 +72,17 @@ void main() {
                 }
 
                 // Exibe a mensagem por 5 segundos (5000ms) e adiciona o dinheiro
-                ShowLesterMsg("Lester: O dinheiro foi transferido! Fique atento para o proximo golpe.", 5000);
+                ShowLesterMsg("Lester: O dinheiro foi transferido! Fique atento para os proximos golpes!!", 5000);
                 AddMoneyToCurrentCharacter(250000); 
                 
                 WAIT(5000); // Espera a mensagem sumir
+
+                // Mensagem final no telefone com sprite CHAR_MP_FM_CONTACT
+                _SET_NOTIFICATION_TEXT_ENTRY("STRING");
+                ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME("script feito com carinho para a comunidade 360!~n~creditos reservados~n~definitive edition 2026");
+                _SET_NOTIFICATION_MESSAGE_CLAN_TAG_2("CHAR_MP_FM_CONTACT", "CHAR_MP_FM_CONTACT", 1, 7, "Definitive", "Edição", 1, "", 8);
+                _DRAW_NOTIFICATION(8000, 1);
+                WAIT(8000);
                 TERMINATE_THIS_THREAD();
             }
         }

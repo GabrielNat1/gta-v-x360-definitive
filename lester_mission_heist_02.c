@@ -4,6 +4,8 @@
 #include "natives.h"
 #include "common.h"
 
+// name > lester_mission_heist_02
+
 // Coordenadas da fábrica do Lester
 #define LESTER_FACTORY_X 707.85f
 #define LESTER_FACTORY_Y -966.62f
@@ -11,8 +13,8 @@
 
 // Coordenadas para entregar o carro (pode ajustar para o local exato desejado)
 #define DELIVERY_X 713.0f
-#define DELIVERY_Y -968.0f
-#define DELIVERY_Z 30.40f
+#define DELIVERY_Y -978.92f
+#define DELIVERY_Z 23.73f
 
 enum Buttons { Button_A = 0xC1 };
 
@@ -137,9 +139,10 @@ void main() {
 				FloatingHelpText("Saia do carro!");
 				deliveryDone = true;
 				RemoveDeliveryBlip();
-				if (carBlip) { REMOVE_BLIP(&carBlip); carBlip = 0; }
-				waitingToFinish = true;
-				tickSinceDelivery = 0;
+				   if (carBlip) { REMOVE_BLIP(&carBlip); carBlip = 0; }
+				   waitingToFinish = true;
+				   tickSinceDelivery = 0;
+				   FloatingHelpText("Saia do local!");
 			}
 		}
 
@@ -152,16 +155,16 @@ void main() {
 			float dy = ppos.y - DELIVERY_Y;
 			float dz = ppos.z - DELIVERY_Z;
 			float dist = SQRT(dx*dx + dy*dy + dz*dz);
-			if (dist > 15.0f) {
-				RemoveGetawayCar();
-				FloatingHelpText(""); // limpa helptext
-				ShowLesterMsg("Perfeito! Obrigado, agora estamos prontos para a próxima etapa.", "Lester");
-				WAIT(2000);
-				REQUEST_SCRIPT("lester_mission_heist_fleeca_03");
-				while (!HAS_SCRIPT_LOADED("lester_mission_heist_fleeca_03")) WAIT(0);
-				START_NEW_SCRIPT("lester_mission_heist_fleeca_03", 1024);
-				SET_SCRIPT_AS_NO_LONGER_NEEDED("lester_mission_heist_fleeca_03");
-				TERMINATE_THIS_THREAD();
+			if (dist > 30.0f) {
+				   RemoveGetawayCar();
+				   FloatingHelpText(""); // limpa helptext (remove mensagem "Saia do local!")
+				   ShowLesterMsg("Perfeito! Obrigado, agora estamos prontos para a próxima etapa.", "Lester");
+				   WAIT(2000);
+				   REQUEST_SCRIPT("lester_mission_wait_02");
+				   while (!HAS_SCRIPT_LOADED("lester_mission_wait_02")) WAIT(0);
+				   START_NEW_SCRIPT("lester_mission_wait_02", 1024);
+				   SET_SCRIPT_AS_NO_LONGER_NEEDED("lester_mission_wait_02");
+				   TERMINATE_THIS_THREAD();
 			}
 		}
 

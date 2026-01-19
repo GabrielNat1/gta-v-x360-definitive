@@ -201,15 +201,18 @@ void OpenVaultDoor()
     // Congela o player durante a animação e abertura da porta
     FREEZE_ENTITY_POSITION(PLAYER_PED_ID(), true);
 
-    // Animação do jogador: hackear/mexer no painel (sequência única)
-    REQUEST_ANIM_DICT("anim@heists@keypad@");
-    while (!HAS_ANIM_DICT_LOADED("anim@heists@keypad@"))
+    // Animação de passar cartão
+    REQUEST_ANIM_DICT("anim@mp_player_intmenu@key_fob@");
+    while (!HAS_ANIM_DICT_LOADED("anim@mp_player_intmenu@key_fob@"))
         WAIT(0);
 
+    // Toca som de cartão
+    PLAY_SOUND_FROM_ENTITY(-1, "ATM_CARD_INSERT", PLAYER_PED_ID(), "HUD_FRONTEND_DEFAULT_SOUNDSET", false, (any)0);
+
     TASK_PLAY_ANIM(
         PLAYER_PED_ID(),
-        "anim@heists@keypad@",
-        "enter",
+        "anim@mp_player_intmenu@key_fob@",
+        "fob_click_fp",
         8.0f,
         -8.0f,
         2000,
@@ -220,36 +223,6 @@ void OpenVaultDoor()
         false
     );
     WAIT(2000);
-
-    TASK_PLAY_ANIM(
-        PLAYER_PED_ID(),
-        "anim@heists@keypad@",
-        "idle_a",
-        8.0f,
-        -8.0f,
-        2000,
-        1,
-        0,
-        false,
-        false,
-        false
-    );
-    WAIT(2000);
-
-    TASK_PLAY_ANIM(
-        PLAYER_PED_ID(),
-        "anim@heists@keypad@",
-        "exit",
-        8.0f,
-        -8.0f,
-        1500,
-        1,
-        0,
-        false,
-        false,
-        false
-    );
-    WAIT(1500);
 
     FREEZE_ENTITY_POSITION(gVaultDoor, false);
 

@@ -9,9 +9,10 @@
 #define LESTER_FACTORY_Y -966.62f
 #define LESTER_FACTORY_Z 30.40f
 
-#define DELIVERY_X 713.01f
-#define DELIVERY_Y -978.92f
-#define DELIVERY_Z 23.73f
+// Altere aqui para a nova posição de entrega:
+#define DELIVERY_X 706.73f
+#define DELIVERY_Y -961.12f
+#define DELIVERY_Z 30.0f
 
 #define FLEECA_BLIP_X -2964.6704f
 #define FLEECA_BLIP_Y  482.9354f
@@ -32,6 +33,16 @@
 #define FLEECA_PARK_X -2973.6899f
 #define FLEECA_PARK_Y  481.2466f
 #define FLEECA_PARK_Z   14.8711f
+
+// Dicionários de animação usados
+
+// Animações diferentes para cada NPC
+#define ANIM_IDLE_1 "amb@world_human_stand_mobile@male@standing@call@base"
+#define ANIM_IDLE_2 "amb@world_human_hang_out_street@male_b@idle_a"
+#define ANIM_IDLE_3 "amb@world_human_clipboard@male@idle_a"
+
+#define ANIM_HANDSUP "random@arrests"
+#define ANIM_HANDSUP_NAME "idle_a"
 
 enum Buttons { Button_A = 0xC1 };
 
@@ -67,11 +78,18 @@ int parkCheckpoint = 0;
 int parkedTimer = 0;
 bool parkedConfirmed = false;
 bool fleecaNpcsSpawned = false;
+
 bool hostagesHandsUp = false;
 bool alarmSequenceStarted = false;
 int deliveryCheckpoint = 0;
 bool canDeliverLoot = false;
 int deliveryMoneyProp = 0;
+bool hostagesReacted = false;
+int alarmSequenceTimer = 0;
+
+// Controle para ajoelhar/deitar após 10s
+bool hostagesKneel[2] = {false, false};
+int hostagesKneelTimer = 0;
 
 void ShowLesterMsg(const char* msg, const char* title) {
 	_SET_NOTIFICATION_TEXT_ENTRY("STRING");
@@ -134,8 +152,8 @@ void RemoveCarBlip() {
 void CreateFleecaBlip() {
 	if (fleecaBlip) return;
 	fleecaBlip = ADD_BLIP_FOR_COORD(FLEECA_BLIP_X, FLEECA_BLIP_Y, FLEECA_BLIP_Z);
-	SET_BLIP_SPRITE(fleecaBlip, 500);
-	SET_BLIP_COLOUR(fleecaBlip, 1);
+	SET_BLIP_SPRITE(fleecaBlip, 108); // Blip 108
+	SET_BLIP_COLOUR(fleecaBlip, 5);   // Amarelo igual aos outros
 	SET_BLIP_ROUTE(fleecaBlip, 1);
 	BEGIN_TEXT_COMMAND_SET_BLIP_NAME("STRING");
 	ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME("Banco Fleeca");
@@ -144,6 +162,24 @@ void CreateFleecaBlip() {
 
 void RemoveFleecaBlip() {
 	if (fleecaBlip) { REMOVE_BLIP(&fleecaBlip); fleecaBlip = 0; }
+}
+
+void CreateLesterFactoryBlip() {
+    if (assaultBlip) return;
+
+    assaultBlip = ADD_BLIP_FOR_COORD(
+        LESTER_FACTORY_X,
+        LESTER_FACTORY_Y,
+        LESTER_FACTORY_Z
+    );
+
+    SET_BLIP_SPRITE(assaultBlip, 1);      // waypoint padrão
+    SET_BLIP_COLOUR(assaultBlip, 5);      // amarelo
+    SET_BLIP_ROUTE(assaultBlip, 1);
+
+    BEGIN_TEXT_COMMAND_SET_BLIP_NAME("STRING");
+    ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME("Fábrica do Lester");
+    END_TEXT_COMMAND_SET_BLIP_NAME(assaultBlip);
 }
 
 void CreateDeliveryBlip() {
@@ -188,52 +224,59 @@ float GetDist(vector3 a, float x, float y, float z) {
 	return SQRT(dx*dx + dy*dy + dz*dz);
 }
 
+void RequestAnimDict(const char* dict) {
+	REQUEST_ANIM_DICT(dict);
+	while (!HAS_ANIM_DICT_LOADED(dict)) WAIT(0);
+}
+
 void SpawnFleecaNPCs() {
-    if (fleecaNpcsSpawned) return;
+	if (fleecaNpcsSpawned) return;
 
-    vector3 npcPos[3] = {
-        {-2962.59f, 485.86f, 15.69f},
-        {-2964.90f, 479.48f, 16.69f},
-        {-2960.92f, 483.06f, 15.69f}
-    };
+	vector3 npcsPos[3] = {
+		{-2962.59f, 485.86f, 15.69f},
+		{-2964.90f, 479.48f, 16.69f},
+		{-2960.92f, 483.06f, 15.69f}
+	};
+	float headings[3] = {180.0f, 90.0f, 270.0f};
+	const char* animDicts[3] = { ANIM_IDLE_1, ANIM_IDLE_2, ANIM_IDLE_3 };
+	const char* animNames[3] = { "base", "idle_a", "idle_a" };
 
-    float npcHeading[3] = {
-        180.0f,
-        90.0f,
-        270.0f
-    };
+	Hash pedHash = GET_HASH_KEY("a_m_y_business_01");
+	REQUEST_MODEL(pedHash);
+	while (!HAS_MODEL_LOADED(pedHash)) WAIT(0);
 
-    Hash pedHash = GET_HASH_KEY("a_m_y_business_01");
-    REQUEST_MODEL(pedHash);
-    while (!HAS_MODEL_LOADED(pedHash)) WAIT(0);
-
-    for (int i = 0; i < 3; i++) {
-
-        fleecaNpcs[i] = CREATE_PED(
-            26,                 // CIVMALE
-            pedHash,
-            npcPos[i],
-            npcHeading[i],
-            1,
-            1
-        );
-
-        SET_ENTITY_AS_MISSION_ENTITY(fleecaNpcs[i], 1, 1);
-
-        // 🧱 garante que ele fique no chão
-        PLACE_OBJECT_ON_GROUND_PROPERLY(fleecaNpcs[i]);
-
-        // 🔒 trava total do NPC
-        SET_BLOCKING_OF_NON_TEMPORARY_EVENTS(fleecaNpcs[i], 1);
-        SET_PED_FLEE_ATTRIBUTES(fleecaNpcs[i], 0, 0);
-        SET_PED_COMBAT_ATTRIBUTES(fleecaNpcs[i], 46, 1);
-        SET_PED_CAN_RAGDOLL(fleecaNpcs[i], 0);
-
-        // ❄️ congela até o assalto começar
-        FREEZE_ENTITY_POSITION(fleecaNpcs[i], 1);
-    }
-
-    fleecaNpcsSpawned = true;
+	for (int i = 0; i < 3; i++) {
+		RequestAnimDict(animDicts[i]);
+		fleecaNpcs[i] = CREATE_PED(
+			26,
+			pedHash,
+			npcsPos[i],
+			headings[i],
+			1,
+			1
+		);
+		SET_ENTITY_AS_MISSION_ENTITY(fleecaNpcs[i], 1, 1);
+		SET_BLOCKING_OF_NON_TEMPORARY_EVENTS(fleecaNpcs[i], 1);
+		SET_PED_FLEE_ATTRIBUTES(fleecaNpcs[i], 0, 0);
+		SET_PED_CAN_RAGDOLL(fleecaNpcs[i], 0);
+		CLEAR_PED_TASKS_IMMEDIATELY(fleecaNpcs[i]);
+		// Força animação idle correta para cada NPC
+		RequestAnimDict(animDicts[i]);
+		TASK_PLAY_ANIM(
+			fleecaNpcs[i],
+			animDicts[i],
+			animNames[i],
+			8.0f,
+			-8.0f,
+			-1,
+			1, // loop
+			0,
+			0,
+			0,
+			0
+		);
+	}
+	fleecaNpcsSpawned = true;
 }
 
 void SpawnMoneyBags() {
@@ -257,6 +300,16 @@ void RemoveMoneyBags() {
 	bagsSpawned = false;
 }
 
+void RemoveFleecaNPCs() {
+	for (int i = 0; i < 3; i++) {
+		if (fleecaNpcs[i]) {
+			DELETE_PED(&fleecaNpcs[i]);
+			fleecaNpcs[i] = 0;
+		}
+	}
+	fleecaNpcsSpawned = false;
+}
+
 void RestartMission() {
 	RemoveGetawayCar();
 	RemoveCarBlip();
@@ -264,6 +317,7 @@ void RestartMission() {
 	RemoveDeliveryBlip();
 	RemoveAssaultBlip();
 	RemoveMoneyBags();
+	RemoveFleecaNPCs(); // Remover NPCs do banco
 	carReady = false;
 	atFleeca = false;
 	alarmTriggered = false;
@@ -279,46 +333,58 @@ void RestartMission() {
 	escapeStarted = false;
 	escapeComplete = false;
 	showPlaceLoot = false;
+	doorScriptStarted = false;
+	parkedNearBank = false;
+	maskEquipped = false;
+	robberyStarted = false;
+	enteredBank = false;
+	aimingAtHostages = false;
+	parkCheckpoint = 0;
+	parkedTimer = 0;
+	parkedConfirmed = false;
+	fleecaNpcsSpawned = false;
+	hostagesHandsUp = false;
+	alarmSequenceStarted = false;
+	deliveryCheckpoint = 0;
+	canDeliverLoot = false;
+	deliveryMoneyProp = 0;
+	hostagesReacted = false;
+	alarmSequenceTimer = 0;
+	hostagesKneel[0] = false;
+	hostagesKneel[1] = false;
+	hostagesKneelTimer = 0;
+	// Spawn carro na fábrica novamente
+	SpawnGetawayCar();
+	CreateCarBlip();
 }
 
-
 void ResetMissionState() {
-
-    alarmTriggered = false;
-    alarmSequenceStarted = false;
-    escapeComplete = false;
-    missionFinished = false;
-    carReady = false;
-    atFleeca = false;
-    parkedNearBank = false;
-    parkedConfirmed = false;
-    maskEquipped = false;
-    enteredBank = false;
-    hostagesHandsUp = false;
-
-    fleecaNpcsSpawned = false;
-
-    // Remove NPCs
-    for (int i = 0; i < 3; i++) {
-        if (fleecaNpcs[i]) {
-            DELETE_PED(&fleecaNpcs[i]);
-            fleecaNpcs[i] = 0;
-        }
-    }
-
-    // Remove blips / checkpoints
-    RemoveCarBlip();
-    RemoveFleecaBlip();
-    RemoveDeliveryBlip();
-
-    if (parkCheckpoint) {
-        DELETE_CHECKPOINT(parkCheckpoint);
-        parkCheckpoint = 0;
-    }
-
-    // Remove wanted level
-    SET_PLAYER_WANTED_LEVEL(PLAYER_ID(), 0, 0);
-    SET_PLAYER_WANTED_LEVEL_NOW(PLAYER_ID(), 1);
+	alarmTriggered = false;
+	alarmSequenceStarted = false;
+	escapeComplete = false;
+	missionFinished = false;
+	carReady = false;
+	atFleeca = false;
+	parkedNearBank = false;
+	parkedConfirmed = false;
+	maskEquipped = false;
+	enteredBank = false;
+	hostagesHandsUp = false;
+	fleecaNpcsSpawned = false;
+	RemoveFleecaNPCs(); // Remover NPCs do banco
+	RemoveGetawayCar();
+	RemoveCarBlip();
+	RemoveFleecaBlip();
+	RemoveDeliveryBlip();
+	if (parkCheckpoint) {
+		DELETE_CHECKPOINT(parkCheckpoint);
+		parkCheckpoint = 0;
+	}
+	SET_PLAYER_WANTED_LEVEL(PLAYER_ID(), 0, 0);
+	SET_PLAYER_WANTED_LEVEL_NOW(PLAYER_ID(), 1);
+	// Spawn carro na fábrica novamente
+	SpawnGetawayCar();
+	CreateCarBlip();
 }
 
 bool MissionFailed() {
@@ -331,38 +397,55 @@ bool MissionFailed() {
     return false;
 }
 
-void MissionPassed(const char* missionName) {
+void BlockAmbientEvents() {
+	// Desativa eventos aleatórios e peds não relacionados à missão
+	SET_CREATE_RANDOM_COPS(0);
+	SET_CREATE_RANDOM_COPS_NOT_ON_SCENARIOS(0);
+	SET_CREATE_RANDOM_COPS_ON_SCENARIOS(0);
+	SET_RANDOM_EVENT_FLAG(0);
+	SET_PED_DENSITY_MULTIPLIER_THIS_FRAME(0.0f);
+	SET_GARBAGE_TRUCKS(0);
+	SET_RANDOM_BOATS(0);
+	SET_VEHICLE_DENSITY_MULTIPLIER_THIS_FRAME(0.0f);
+	SET_PARKED_VEHICLE_DENSITY_MULTIPLIER_THIS_FRAME(0.0f);
+	SET_SCENARIO_TYPE_ENABLED("WORLD_HUMAN_PROSTITUTE_HIGH_CLASS", 0);
+	SET_SCENARIO_TYPE_ENABLED("WORLD_HUMAN_PROSTITUTE_LOW_CLASS", 0);
+	// Adicione outros cenários conforme necessário
+}
 
-    // Som de missão concluída
-    PLAY_MISSION_COMPLETE_AUDIO("MISSION_COMPLETE");
-
-    WAIT(300);
-
-    // Texto "Missão Concluída"
-    _SET_NOTIFICATION_TEXT_ENTRY("STRING");
-    ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME("Missão Concluída");
-    _SET_NOTIFICATION_MESSAGE_CLAN_TAG_2(
-        "CHAR_DEFAULT",
-        "CHAR_DEFAULT",
-        1,
-        7,
-        missionName,
-        "",
-        1,
-        "",
-        8
-    );
-    _DRAW_NOTIFICATION(5000, 1);
-
-    // Finaliza flag de missão
-    SET_MISSION_FLAG(0);
+void MakeHostagesRaiseHands() {
+	RequestAnimDict(ANIM_HANDSUP);
+	for (int i = 0; i < 3; i++) {
+		if (fleecaNpcs[i]) {
+			CLEAR_PED_TASKS_IMMEDIATELY(fleecaNpcs[i]);
+			// Força o carregamento do dicionário antes de animar
+			RequestAnimDict(ANIM_HANDSUP);
+			TASK_PLAY_ANIM(
+				fleecaNpcs[i],
+				ANIM_HANDSUP,
+				ANIM_HANDSUP_NAME,
+				8.0f,
+				-8.0f,
+				-1,
+				2, // upper body only, não loop
+				0,
+				0,
+				0,
+				0
+			);
+			SET_BLOCKING_OF_NON_TEMPORARY_EVENTS(fleecaNpcs[i], 1);
+		}
+	}
+	hostagesHandsUp = true;
+	hostagesReacted = true;
+	hostagesKneel[0] = false;
+	hostagesKneel[1] = false;
+	hostagesKneelTimer = 0;
 }
 
 void main() {
 	SET_MISSION_FLAG(1);
 	NETWORK_SET_SCRIPT_IS_SAFE_FOR_NETWORK_GAME();
-
-	//while (tick < 9000) { WAIT(20); tick++; }
 
 retry:
 	ShowLesterMsg("Está tudo pronto, venha até a fábrica e pegue o carro!", "Lester");
@@ -374,9 +457,12 @@ retry:
 
 	while (true) {
 
+		BlockAmbientEvents();
+
 		if (MissionFailed()) {
-			ShowLesterMsg("Droga! Deu tudo errado. Volta pra fábrica e tenta de novo.", "Lester");
-			WAIT(3000);
+			WAIT(30000);
+			ShowLesterMsg("Droga! Deu tudo errado! tente novamente", "Lester");
+			WAIT(20000);
 
 			ResetMissionState();
 			goto retry;
@@ -399,7 +485,7 @@ retry:
 		// Falha da missão
 		if (MissionFailed()) {
 			ShowLesterMsg("Você falhou! Tente novamente.", "Lester");
-			WAIT(2000);
+			WAIT(3000);
 			RestartMission();
 			goto retry;
 		}
@@ -412,6 +498,7 @@ retry:
 			ShowLesterMsg("Dirija até o Banco Fleeca.", "Plano");
 		}
 
+		// NPCs só spawnam quando player está próximo do banco
 		if (carReady && !fleecaNpcsSpawned &&
 			GetDist(ppos, FLEECA_DOOR_X, FLEECA_DOOR_Y, FLEECA_DOOR_Z) < 30.0f) {
 
@@ -488,37 +575,113 @@ retry:
 			!IsPlayerInGetawayCar() &&
 			GetDist(ppos, FLEECA_DOOR_X, FLEECA_DOOR_Y, FLEECA_DOOR_Z) < 5.0f) {
 
-			SpawnFleecaNPCs();
+			// Garante que os NPCs estejam presentes e animados
+			if (!fleecaNpcsSpawned) {
+				SpawnFleecaNPCs();
+			} else {
+				// Força animação idle para todos NPCs ao entrar no banco
+				const char* animDicts[3] = { ANIM_IDLE_1, ANIM_IDLE_2, ANIM_IDLE_3 };
+				const char* animNames[3] = { "base", "idle_a", "idle_a" };
+				for (int i = 0; i < 3; i++) {
+					if (fleecaNpcs[i]) {
+						RequestAnimDict(animDicts[i]);
+						CLEAR_PED_TASKS_IMMEDIATELY(fleecaNpcs[i]);
+						TASK_PLAY_ANIM(
+							fleecaNpcs[i],
+							animDicts[i],
+							animNames[i],
+							8.0f,
+							-8.0f,
+							-1,
+							1, // loop
+							0,
+							0,
+							0,
+							0
+						);
+					}
+				}
+			}
 			ShowLesterMsg(
 				"Aponte a arma para os reféns e abra o cofre com o cartão.",
 				"Lester"
 			);
 
 			enteredBank = true;
+			alarmSequenceTimer = 0;
+			hostagesReacted = false;
 		}
 
-		if (!alarmSequenceStarted &&
-			!IsPlayerInGetawayCar() &&
-			GetDist(ppos, FLEECA_DOOR_X, FLEECA_DOOR_Y, FLEECA_DOOR_Z) < 4.0f) {
+		// SISTEMA DE REAÇÃO DOS REFÉNS
+		if (enteredBank && !hostagesReacted) {
+			bool aimingAtNpc = false;
+			int player = PLAYER_PED_ID();
 
-			alarmSequenceStarted = true;
-
-			// NPCs levantam as mãos
 			for (int i = 0; i < 3; i++) {
 				if (fleecaNpcs[i]) {
-					FREEZE_ENTITY_POSITION(fleecaNpcs[i], 0);
-					TASK_HANDS_UP(
-						fleecaNpcs[i],
-						-1,
-						PLAYER_PED_ID(),
-						-1,
-						1
-					);
-
-					SET_BLOCKING_OF_NON_TEMPORARY_EVENTS(fleecaNpcs[i], 1);
+					// Verifica se o player está mirando em algum NPC
+					if (IS_PLAYER_FREE_AIMING_AT_ENTITY(PLAYER_ID(), fleecaNpcs[i])) {
+						aimingAtNpc = true;
+						break;
+					}
+					// Se o player atirar próximo do NPC
+					if (IS_PED_SHOOTING(player)) {
+						vector3 npcPos = GET_ENTITY_COORDS(fleecaNpcs[i], 1);
+						vector3 playerPos = GET_ENTITY_COORDS(player, 1);
+						if (GetDist(playerPos, npcPos.x, npcPos.y, npcPos.z) < 8.0f) {
+							aimingAtNpc = true;
+							break;
+						}
+					}
 				}
 			}
 
+			if (aimingAtNpc) {
+				MakeHostagesRaiseHands();
+				alarmSequenceStarted = true;
+				alarmSequenceTimer = 0;
+			} else {
+				alarmSequenceTimer++;
+				// Espera 5 segundos (~250 ticks de 20ms)
+				if (alarmSequenceTimer > 250) {
+					MakeHostagesRaiseHands();
+					alarmSequenceStarted = true;
+				}
+			}
+		}
+
+		// Após 10 segundos (~500 ticks de 20ms), os dois primeiros reféns ajoelham/deitam
+		if (hostagesHandsUp && !hostagesKneel[0] && !hostagesKneel[1]) {
+			hostagesKneelTimer++;
+			if (hostagesKneelTimer > 500) { // 10 segundos
+				// Animação de ajoelhar/deitar
+				const char* kneelDict = "rcmbarry";
+				const char* kneelAnim = "bar_1_attack_idle_aln";
+				RequestAnimDict(kneelDict);
+				for (int i = 0; i < 2; i++) {
+					if (fleecaNpcs[i]) {
+						CLEAR_PED_TASKS_IMMEDIATELY(fleecaNpcs[i]);
+						TASK_PLAY_ANIM(
+							fleecaNpcs[i],
+							kneelDict,
+							kneelAnim,
+							8.0f,
+							-8.0f,
+							-1,
+							1, // loop
+							0,
+							0,
+							0,
+							0
+						);
+						hostagesKneel[i] = true;
+					}
+				}
+			}
+		}
+
+		// ALARME E SEQUÊNCIA APÓS REFÉNS LEVANTAREM AS MÃOS
+		if (alarmSequenceStarted && hostagesHandsUp && !alarmTriggered) {
 			// 🔔 Alarme do banco
 			START_ALARM("FLEECA_BANK_ALARMS", 0);
 
@@ -528,7 +691,7 @@ retry:
 				"Lester"
 			);
 
-			WAIT(10000); // 4 segundos
+			WAIT(25000);
 
 			// 🎧 Lester – segunda fala
 			ShowLesterMsg(
@@ -536,7 +699,7 @@ retry:
 				"Lester"
 			);
 
-			WAIT(15000); // 2 segundos
+			WAIT(15000);
 
 			// 🚓 Polícia chega
 			SET_PLAYER_WANTED_LEVEL(PLAYER_ID(), 5, 0);
@@ -561,6 +724,10 @@ retry:
 			GET_PLAYER_WANTED_LEVEL(PLAYER_ID()) == 0) {
 
 			escapeComplete = true;
+
+			RemoveFleecaBlip();
+			SET_WAYPOINT_OFF();
+			CreateLesterFactoryBlip();
 
 			vector3 dropPos = {DELIVERY_X, DELIVERY_Y, DELIVERY_Z - 0.6f};
 			vector3 dir = {0.0f, 0.0f, 0.0f};
@@ -600,17 +767,13 @@ retry:
 			showPlaceLoot = true;
 		}
 
+
 		// Depositar dinheiro
 		if (canDeliverLoot && !lootPlaced) {
-
 			float dist = GetDist(ppos, DELIVERY_X, DELIVERY_Y, DELIVERY_Z);
-
 			if (dist < 2.5f) {
-
 				FloatingHelpText("Aperte ~INPUT_FRONTEND_ACCEPT~ para entregar o dinheiro");
-
 				if (IS_CONTROL_JUST_PRESSED(0, INPUT_FRONTEND_ACCEPT)) {
-
 					lootPlaced = true;
 					canDeliverLoot = false;
 					FloatingHelpText("");
@@ -637,6 +800,16 @@ retry:
 						DELETE_CHECKPOINT(deliveryCheckpoint);
 						deliveryCheckpoint = 0;
 					}
+					// Remove blip e GPS da missão
+					RemoveAssaultBlip();
+					SET_WAYPOINT_OFF();
+
+					// Desliga e trava o carro usado
+					if (getawayCar) {
+						SET_VEHICLE_ENGINE_ON(getawayCar, 0, 1, 1);
+						SET_VEHICLE_UNDRIVEABLE(getawayCar, 1);
+						SET_VEHICLE_DOORS_LOCKED(getawayCar, 2); // 2 = locked
+					}
 
 					ShowLesterMsg(
 						"Perfeito. Agora deixa comigo.",
@@ -659,7 +832,7 @@ retry:
 			missionFinished = true;
 			tickAfterLoot = 0;
 			WAIT(2000);
-			MissionPassed("Assalto ao Fleeca");
+			//MissionPassed("Assalto ao Fleeca");
 		}
 
 		// Encerrar script
@@ -670,6 +843,8 @@ retry:
 					DELETE_OBJECT(&deliveryMoneyProp);
 					deliveryMoneyProp = 0;
 				}
+				// Encerra todos os scripts "door"
+				TERMINATE_ALL_SCRIPTS_WITH_THIS_NAME("door");
 				REQUEST_SCRIPT("lester_mission_heist_fleeca_final_03");
 				while (!HAS_SCRIPT_LOADED("lester_mission_heist_fleeca_final_03")) WAIT(0);
 				START_NEW_SCRIPT("lester_mission_heist_fleeca_final_03", 1024);

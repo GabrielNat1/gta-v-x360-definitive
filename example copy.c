@@ -30,8 +30,7 @@ vector3 houseOutside = {1400.2178f, 3599.8728f, 35.0367f};
 vector3 houseInside1 = {1393.3156f, 3602.5510f, 38.9419f};
 vector3 houseInside2 = {1389.8719f, 3601.0034f, 38.9424f};
 vector3 boxPos      = {1392.5600f, 3601.1020f, 38.9403f};
-// Altere aqui para a nova posição de entrega:
-vector3 factoryPos  = {706.18f, -961.12f, 30.0f}; 
+vector3 factoryPos  = {707.0f, -966.0f, 30.4f}; 
 
 // NPC/prop handles
 int npcOutside = 0;
@@ -91,20 +90,14 @@ void SpawnMissionNPCsAndProps() {
 	// Inside NPCs
 	npcInside1 = CREATE_PED(26, GET_HASH_KEY("a_m_m_hillbilly_01"), houseInside1, 180.0f, 1, 1);
 	npcInside2 = CREATE_PED(26, GET_HASH_KEY("a_m_m_hillbilly_02"), houseInside2, 270.0f, 1, 1);
-	// NPCs internos já agressivos
-	int player = PLAYER_PED_ID();
-	if (npcInside1) {
-		GIVE_WEAPON_TO_PED(npcInside1, GET_HASH_KEY("WEAPON_PISTOL"), 60, 0, 1);
-		TASK_COMBAT_PED(npcInside1, player, 0, 16);
-	}
-	if (npcInside2) {
-		GIVE_WEAPON_TO_PED(npcInside2, GET_HASH_KEY("WEAPON_PISTOL"), 60, 0, 1);
-		TASK_COMBAT_PED(npcInside2, player, 0, 16);
-	}
-	// Box prop (ajusta z para não flutuar)
-	boxProp = CREATE_OBJECT_NO_OFFSET(GET_HASH_KEY("prop_box_wood01a"), boxPos.x, boxPos.y, boxPos.z - 0.25f, 1, 1, 0);
+	// Garante que NPCs internos não sejam nulos
+	if (npcInside1) CLEAR_PED_TASKS_IMMEDIATELY(npcInside1);
+	if (npcInside2) CLEAR_PED_TASKS_IMMEDIATELY(npcInside2);
+	// Box prop 
+	boxProp = CREATE_OBJECT_NO_OFFSET(GET_HASH_KEY("prop_box_wood01a"), boxPos.x, boxPos.y, boxPos.z, 1, 1, 0);
 	SET_ENTITY_AS_MISSION_ENTITY(boxProp, 1, 1);
 	SET_ENTITY_DYNAMIC(boxProp, 1); // Ativa física
+	FREEZE_ENTITY_POSITION(boxProp, 1); // Congela inicialmente
 	boxSpawned = true;
 	npcsSpawned = true;
 }
@@ -127,13 +120,11 @@ void SpawnReinforcements() {
 		{1385.0f, 3612.0f, 34.0f}
 	};
 	for (int i = 0; i < 4; ++i) {
-		reinfVehicles[i] = CREATE_VEHICLE(GET_HASH_KEY("granger"), spawnPoints[i], 0.0f, 1, 1);
+		reinfVehicles[i] = CREATE_VEHICLE(GET_HASH_KEY("granger"), spawnPoints[i], 0.0f, 1, 1); // Corrigido: argumentos corretos
 		for (int j = 0; j < 3; ++j) {
 			int ped = CREATE_PED_INSIDE_VEHICLE(reinfVehicles[i], 26, GET_HASH_KEY("g_m_y_lost_01"), j, 1, 1);
-			if (ped) {
-				GIVE_WEAPON_TO_PED(ped, GET_HASH_KEY("WEAPON_MICROSMG"), 120, 0, 1);
-				reinfPeds[i*3+j] = ped;
-			}
+			GIVE_WEAPON_TO_PED(ped, GET_HASH_KEY("WEAPON_MICROSMG"), 120, 0, 1);
+			reinfPeds[i*3+j] = ped;
 		}
 	}
 	reinfSpawned = true;
@@ -231,26 +222,43 @@ void main()
 
 		case MISSION_INSIDE:
 			// Draw marker on box
-			if (boxSpawned && boxProp) {
+			if (boxSpawned) {
 				vector3 markerPos = {boxPos.x, boxPos.y, boxPos.z+0.5f};
 				vector3 zero = {0.0f, 0.0f, 0.0f};
 				vector3 scale = {0.4f, 0.4f, 0.4f};
-				RGBA yellow = {255, 255, 0, 180};   
+				RGBA yellow = {255, 255, 0, 180};
 				DRAW_MARKER(1, markerPos, zero, zero, scale, yellow, 0, 0, 2, 0, 0, 0, 0);
 			}
-			// NPCs já estão agressivos no spawn, não precisa reatribuir aqui
-			missionState = MISSION_SHOOTOUT;
+			// NPCs internos só atacam agora
+			bool startedCombat = false;
+			if (npcInside1 && !IS_PED_DEAD_OR_DYING(npcInside1, 1)) {
+				GIVE_WEAPON_TO_PED(npcInside1, GET_HASH_KEY("WEAPON_PISTOL"), 60, 0, 1);
+				TASK_COMBAT_PED(npcInside1, player, 0, 16);
+				startedCombat = true;
+			}
+			if (npcInside2 && !IS_PED_DEAD_OR_DYING(npcInside2, 1)) {
+				GIVE_WEAPON_TO_PED(npcInside2, GET_HASH_KEY("WEAPON_PISTOL"), 60, 0, 1);
+				TASK_COMBAT_PED(npcInside2, player, 0, 16);
+				startedCombat = true;
+			}
+			if (startedCombat) {
+				missionState = MISSION_SHOOTOUT;
+			}
 			break;
 
 		case MISSION_SHOOTOUT:
 			// Allow player to pick up box if close and NPCs are dead
-			if (boxSpawned && boxProp && PlayerNearV(boxPos, 1.5f) &&
-				(!npcInside1 || IS_PED_DEAD_OR_DYING(npcInside1, 1)) &&
+			if (boxSpawned && PlayerNearV(boxPos, 1.5f) && 
+				(!npcInside1 || IS_PED_DEAD_OR_DYING(npcInside1, 1)) && 
 				(!npcInside2 || IS_PED_DEAD_OR_DYING(npcInside2, 1))) {
+				// Libera física da caixa para pegar
+				if (boxProp) {
+					FREEZE_ENTITY_POSITION(boxProp, 0); // Descongela
+				}
 				FloatingHelpText("Pressione ~INPUT_FRONTEND_X~ para pegar a caixa");
 				if (IS_CONTROL_JUST_PRESSED(0, 0xD8)) { // X
 					boxTaken = true;
-					DELETE_OBJECT(&boxProp); boxProp = 0;
+					if (boxProp) { DELETE_OBJECT(&boxProp); boxProp = 0; }
 					ShowLesterMsg("Boa, cara! Mas cuidado... aparentemente eles chamaram reforços.", "Atenção!");
 					missionState = MISSION_REINFORCEMENTS;
 				}
@@ -308,8 +316,6 @@ void main()
 					// Drop box animation (simplificado)
 					factoryBoxProp = CREATE_OBJECT_NO_OFFSET(GET_HASH_KEY("prop_box_wood01a"), factoryPos.x, factoryPos.y, factoryPos.z, 1, 1, 0);
 					SET_ENTITY_AS_MISSION_ENTITY(factoryBoxProp, 1, 1);
-					SET_ENTITY_DYNAMIC(factoryBoxProp, 1);
-					FREEZE_ENTITY_POSITION(factoryBoxProp, 1); // Congela a caixa entregue
 					delivered = true;
 					missionState = MISSION_DELIVER_BOX;
 				}
@@ -335,8 +341,6 @@ void main()
 
 		case MISSION_COMPLETE:
 			// Mission finished, do nothing
-			WAIT(30000); // Aguarda 30 segundos
-			START_NEW_SCRIPT("lester_mission_wait_01", 1024); // Chama o próximo script
 			break;
 
 		case MISSION_FAILED:
