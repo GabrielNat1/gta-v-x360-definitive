@@ -107,67 +107,71 @@ float GetDistToDelivery() {
 }
 
 void main() {
-	SET_MISSION_FLAG(1);
-	NETWORK_SET_SCRIPT_IS_SAFE_FOR_NETWORK_GAME();
+		SET_MISSION_FLAG(1);
+		WAIT(0);
+		//NETWORK_SET_SCRIPT_IS_SAFE_FOR_NETWORK_GAME();
 
-	ShowLesterMsg("É urgente! Desculpe não avisar antes. Um carro essencial para o plano está rondando Los Santos. Capture-o e leve até minha fábrica!", "URGENTE");
-	WAIT(2000);
+		WAIT(2000);
+		ShowLesterMsg("É urgente! Desculpe não avisar antes. Um carro essencial para o plano está rondando Los Santos. Capture-o e leve até minha fábrica!", "URGENTE");
 
-	SpawnGetawayCar();
+		WAIT(2000);
+		ShowLesterMsg("Irei marcar assim que possivel!", "URGENTE");
+		WAIT(10000);
+		SpawnGetawayCar();
 
-	while (true) {
-		if (!carStolen && getawayCar && IsPlayerInGetawayCar()) {
-			carStolen = true;
-			if (carBlip) { SET_BLIP_ROUTE(carBlip, 0); }
-			ShowLesterMsg("Leve o carro até a fábrica. O local está marcado no GPS!", "Plano");
-			CreateDeliveryBlip();
-			deliveryActive = true;
-		}
-
-		if (deliveryActive && getawayCar) {
-			// Mostra marker no local de entrega
-			vector3 markerPos = {DELIVERY_X, DELIVERY_Y, DELIVERY_Z};
-			vector3 zero = {0.0f, 0.0f, 0.0f};
-			vector3 scale = {2.5f, 2.5f, 1.0f};
-			RGBA blue = {0, 150, 255, 120};
-			DRAW_MARKER(1, markerPos, zero, zero, scale, blue, 0, 0, 2, 0, 0, 0, 0);
-
-			// Se carro está em cima do marker
-			if (!deliveryDone && GetDistToDelivery() < 3.0f && IsPlayerInGetawayCar()) {
-				SET_VEHICLE_ENGINE_ON(getawayCar, 0, 1, 0);
-				TASK_LEAVE_VEHICLE(PLAYER_PED_ID(), getawayCar, 0);
-				FloatingHelpText("Saia do carro!");
-				deliveryDone = true;
-				RemoveDeliveryBlip();
-				   if (carBlip) { REMOVE_BLIP(&carBlip); carBlip = 0; }
-				   waitingToFinish = true;
-				   tickSinceDelivery = 0;
-				   FloatingHelpText("Saia do local!");
+		while (true) {
+			if (!carStolen && getawayCar && IsPlayerInGetawayCar()) {
+				carStolen = true;
+				if (carBlip) { SET_BLIP_ROUTE(carBlip, 0); }
+				ShowLesterMsg("Leve o carro até a fábrica. O local está marcado no GPS!", "Plano");
+				CreateDeliveryBlip();
+				deliveryActive = true;
 			}
-		}
 
-		// Após sair do carro e se afastar, remove carro/blip/mensagem e finaliza
-		if (waitingToFinish && deliveryDone) {
-			tickSinceDelivery++;
-			int player = PLAYER_PED_ID();
-			vector3 ppos = GET_ENTITY_COORDS(player, 1);
-			float dx = ppos.x - DELIVERY_X;
-			float dy = ppos.y - DELIVERY_Y;
-			float dz = ppos.z - DELIVERY_Z;
-			float dist = SQRT(dx*dx + dy*dy + dz*dz);
-			if (dist > 30.0f) {
-				   RemoveGetawayCar();
-				   FloatingHelpText(""); // limpa helptext (remove mensagem "Saia do local!")
-				   ShowLesterMsg("Perfeito! Obrigado, agora estamos prontos para a próxima etapa.", "Lester");
-				   WAIT(2000);
-				   REQUEST_SCRIPT("lester_mission_wait_02");
-				   while (!HAS_SCRIPT_LOADED("lester_mission_wait_02")) WAIT(0);
-				   START_NEW_SCRIPT("lester_mission_wait_02", 1024);
-				   SET_SCRIPT_AS_NO_LONGER_NEEDED("lester_mission_wait_02");
-				   TERMINATE_THIS_THREAD();
+			if (deliveryActive && getawayCar) {
+				// Mostra marker no local de entrega
+				vector3 markerPos = {DELIVERY_X, DELIVERY_Y, DELIVERY_Z};
+				vector3 zero = {0.0f, 0.0f, 0.0f};
+				vector3 scale = {2.5f, 2.5f, 1.0f};
+				RGBA blue = {0, 150, 255, 120};
+				DRAW_MARKER(1, markerPos, zero, zero, scale, blue, 0, 0, 2, 0, 0, 0, 0);
+
+				// Se carro está em cima do marker
+				if (!deliveryDone && GetDistToDelivery() < 3.0f && IsPlayerInGetawayCar()) {
+					SET_VEHICLE_ENGINE_ON(getawayCar, 0, 1, 0);
+					TASK_LEAVE_VEHICLE(PLAYER_PED_ID(), getawayCar, 0);
+					FloatingHelpText("Saia do carro!");
+					deliveryDone = true;
+					RemoveDeliveryBlip();
+					   if (carBlip) { REMOVE_BLIP(&carBlip); carBlip = 0; }
+					   waitingToFinish = true;
+					   tickSinceDelivery = 0;
+					   FloatingHelpText("Saia do local!");
+				}
 			}
-		}
 
-		WAIT(20);
+			// Após sair do carro e se afastar, remove carro/blip/mensagem e finaliza
+			if (waitingToFinish && deliveryDone) {
+				tickSinceDelivery++;
+				int player = PLAYER_PED_ID();
+				vector3 ppos = GET_ENTITY_COORDS(player, 1);
+				float dx = ppos.x - DELIVERY_X;
+				float dy = ppos.y - DELIVERY_Y;
+				float dz = ppos.z - DELIVERY_Z;
+				float dist = SQRT(dx*dx + dy*dy + dz*dz);
+				if (dist > 30.0f) {
+					   RemoveGetawayCar();
+					   FloatingHelpText(""); // limpa helptext (remove mensagem "Saia do local!")
+					   ShowLesterMsg("Perfeito! Obrigado, agora estamos prontos para a próxima etapa.", "Lester");
+					   WAIT(2000);
+					   REQUEST_SCRIPT("lester_mission_wait_02");
+					   while (!HAS_SCRIPT_LOADED("lester_mission_wait_02")) WAIT(0);
+					   START_NEW_SCRIPT("lester_mission_wait_02", 512);
+					   SET_SCRIPT_AS_NO_LONGER_NEEDED("lester_mission_wait_02");
+					   TERMINATE_THIS_THREAD();
+				}
+			}
+
+			WAIT(0);
+		}
 	}
-}

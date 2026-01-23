@@ -183,7 +183,14 @@ void ResetMission() {
 
 void main()
 {
+	// Proteção contra múltiplas instâncias usando o nativo disponível
+	if (_GET_NUMBER_OF_INSTANCES_OF_SCRIPT_WITH_NAME_HASH(GET_HASH_KEY("lester_mission_heist_01")) > 1)
+	{
+		TERMINATE_THIS_THREAD();
+	}
+
 	SET_MISSION_FLAG(1);
+	WAIT(0); // Essencial para troca de contexto
 	NETWORK_SET_SCRIPT_IS_SAFE_FOR_NETWORK_GAME();
 
 	// Mensagem inicial cortada
@@ -334,9 +341,10 @@ void main()
 			break;
 
 		case MISSION_COMPLETE:
-			// Mission finished, do nothing
-			WAIT(30000); // Aguarda 30 segundos
-			START_NEW_SCRIPT("lester_mission_wait_01", 1024); // Chama o próximo script
+			ShowLesterMsg("Missão concluída.", "Sucesso");
+			WAIT(3000);
+			START_NEW_SCRIPT("lester_mission_wait_01", 1024);
+			TERMINATE_THIS_THREAD();
 			break;
 
 		case MISSION_FAILED:

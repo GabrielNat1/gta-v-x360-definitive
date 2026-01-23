@@ -18,7 +18,6 @@ enum Buttons
 bool LesterBlipCreated = false;
 bool NearLesterHeist = false;
 bool LesterHeistStarted = false;
-bool LesterScriptStarted = false;
 int WaitToCheckDistance = 0;
 bool missionContinued = false;
 
@@ -27,18 +26,6 @@ void FloatingHelpText(char* text)
 	BEGIN_TEXT_COMMAND_DISPLAY_HELP("STRING");
 	ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME(text);
 	END_TEXT_COMMAND_DISPLAY_HELP(0, 0, 1, -1);
-}
-
-void CreateLesterBlip()
-{
-	if (!LesterBlipCreated)
-	{
-		Blip blip = ADD_BLIP_FOR_COORD(LESTER_FACTORY_X, LESTER_FACTORY_Y, LESTER_FACTORY_Z);
-		SET_BLIP_SPRITE(blip, 77); // Lester's Factory icon
-		SET_BLIP_COLOUR(blip, 5);  // Yellow
-		SET_BLIP_NAME_FROM_TEXT_FILE(blip, "Lester's Factory");
-		LesterBlipCreated = true;
-	}
 }
 
 void CheckLesterHeistProximity()
@@ -59,7 +46,6 @@ void LesterHeistMessage()
 	_SET_NOTIFICATION_MESSAGE_CLAN_TAG_2("CHAR_LESTER", "CHAR_LESTER", 1, 7, "Lester", "Plano do Fleeca", 1, "", 8);
 	_DRAW_NOTIFICATION(5000, 1);
 
-	// Nova mensagem do Lester
 	WAIT(2000);
 	_SET_NOTIFICATION_TEXT_ENTRY("STRING");
 	ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME("Venha até minha fábrica quando estiver pronto!");
@@ -69,23 +55,50 @@ void LesterHeistMessage()
 
 void StartLesterMissionScript()
 {
-	if (!LesterScriptStarted)
+	_SET_NOTIFICATION_TEXT_ENTRY("STRING");
+	ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME("[DEBUG] Solicitando script 'lester_mission_heist_01'...");
+	_DRAW_NOTIFICATION(3000, 1);
+
+	REQUEST_SCRIPT("lester_mission_heist_01");
+	int timeout = 250; // 5 segundos (250*20ms)
+	while (!HAS_SCRIPT_LOADED("lester_mission_heist_01") && timeout > 0)
 	{
-		REQUEST_SCRIPT("lester_mission_heist_01");
-		while (!HAS_SCRIPT_LOADED("lester_mission_heist_01"))
-		{
-			WAIT(0);
-		}
-		START_NEW_SCRIPT("lester_mission_heist_01", 1024);
-		SET_SCRIPT_AS_NO_LONGER_NEEDED("lester_mission_heist_01");
-		LesterScriptStarted = true;
-		WaitToCheckDistance = 0;
+		WAIT(20);
+		timeout--;
 	}
+
+	if (!HAS_SCRIPT_LOADED("lester_mission_heist_01")) {
+		_SET_NOTIFICATION_TEXT_ENTRY("STRING");
+		ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME("[ERRO] Missão não carregou!");
+		_DRAW_NOTIFICATION(5000, 1);
+		return;
+	}
+
+	_SET_NOTIFICATION_TEXT_ENTRY("STRING");
+	ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME("[DEBUG] Script 'lester_mission_heist_01' carregado. Iniciando...");
+	_DRAW_NOTIFICATION(3000, 1);
+
+	int scriptId = START_NEW_SCRIPT("lester_mission_heist_01", 1024);
+
+	if (scriptId == 0) {
+		_SET_NOTIFICATION_TEXT_ENTRY("STRING");
+		ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME("[ERRO] Falha ao iniciar missão!");
+		_DRAW_NOTIFICATION(5000, 1);
+		return;
+	}
+
+	_SET_NOTIFICATION_TEXT_ENTRY("STRING");
+	ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME("[DEBUG] Missão iniciada! (scriptId > 0)");
+	_DRAW_NOTIFICATION(3000, 1);
+
+	SET_SCRIPT_AS_NO_LONGER_NEEDED("lester_mission_heist_01");
+
+	// Termina o loader após iniciar a missão
+	TERMINATE_THIS_THREAD();
 }
 
 void LesterHeistLoop()
 {
-	CreateLesterBlip();
 	CheckLesterHeistProximity();
 
 	// Desenha marker tipo cone invertido no local enquanto não continuou
@@ -99,43 +112,28 @@ void LesterHeistLoop()
 
 	if (!missionContinued && NearLesterHeist)
 	{
-		FloatingHelpText("Aperte ~INPUT_FRONTEND_B~ para iniciar a missão");
+		FloatingHelpText("Aperte ~INPUT_FRONTEND_CANCEL~ para iniciar a missão");
 		if (IS_CONTROL_JUST_PRESSED(0, Button_B))
 		{
+			if (LesterHeistStarted)
+				return; // Protege contra múltiplos starts
+
 			missionContinued = true;
 			LesterHeistStarted = true;
-			LesterHeistMessage();
 			StartLesterMissionScript();
-		}
-	}
-	else if (LesterScriptStarted)
-	{
-		// Aguarda alguns segundos antes de começar a checar distância
-		if (WaitToCheckDistance < 200) // ~4 segundos (200*20ms)
-		{
-			WaitToCheckDistance++;
-		}
-		else
-		{
-			int player = PLAYER_PED_ID();
-			vector3 pos = GET_ENTITY_COORDS(player, 1);
-			float dx = pos.x - LESTER_FACTORY_X;
-			float dy = pos.y - LESTER_FACTORY_Y;
-			float dz = pos.z - LESTER_FACTORY_Z;
-			float dist = SQRT(dx*dx + dy*dy + dz*dz);
-			if (dist > 50.0f)
-			{
-				TERMINATE_THIS_THREAD();
-			}
 		}
 	}
 }
 
+// Este arquivo deve ser o loader (blip, marker, botão, etc), NÃO o dispatcher!
 // Main Loop
 void main()
 {
-	SET_MISSION_FLAG(1);
-	NETWORK_SET_SCRIPT_IS_SAFE_FOR_NETWORK_GAME();
+	// NETWORK_SET_SCRIPT_IS_SAFE_FOR_NETWORK_GAME(); // ❌ REMOVER
+
+	// Envia as mensagens do Lester assim que o script inicia
+	LesterHeistMessage();
+
 	while (true)
 	{
 		LesterHeistLoop();
